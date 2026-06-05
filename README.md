@@ -8,6 +8,7 @@
 - **穿搭推荐**: 根据创意池随机选取风格，生成每日穿搭描述
 - **System Prompt 注入**: 自动将当日状态注入 LLM 上下文，Bot 会"记得"自己今天穿了什么、在做什么
 - **当前状态提取**: 对含时间点的日程自动提取当前或最近活动，减少对话中说出与日程冲突的状态
+- **天气参考**: 可按经纬度拉取 Open-Meteo 天气信息，为穿搭和日程提供天气上下文
 - **懒加载**: 未到生成时间时，首次对话自动触发生成
 - **补充要求**: 重写日程时可附加自定义要求，让生成更符合预期
 
@@ -25,8 +26,11 @@ pip install holidays APScheduler
 | `重写日程` | 管理员 | 重新生成今日日程 |
 | `重写日程 <补充要求>` | 管理员 | 带补充要求重新生成，例如：`重写日程 今天穿黑色连衣裙，安排一个下午茶` |
 | `日程时间 <HH:MM>` | 管理员 | 设置每日自动生成时间 |
+| `天气位置 <纬度> <经度>` | 管理员 | 设置天气参考位置，启用天气上下文 |
+| `天气位置 show` | 管理员 | 查看天气参考状态和坐标 |
+| `天气位置 clear` | 管理员 | 清除天气参考位置 |
 
-别名：`life show`、`life renew`、`life time`
+别名：`life show`、`life renew`、`life time`、`life location`
 
 ## 配置项
 
@@ -35,6 +39,9 @@ pip install holidays APScheduler
 | `schedule_time` | string | `07:00` | 每日自动生成日程的时间 |
 | `reference_history_days` | int | `3` | 生成时参考的历史日程天数 (1-7) |
 | `reference_recent_count` | int | `10` | 生成时参考的近期会话数量，0 表示不参考 |
+| `weather_enabled` | bool | `false` | 是否启用天气参考 |
+| `weather_latitude` | string | `""` | 天气参考纬度 |
+| `weather_longitude` | string | `""` | 天气参考经度 |
 | `pool` | object | - | 创意池，每次生成随机选取 |
 | `prompt_template` | text | - | LLM 生成日程的 Prompt 模板 |
 
@@ -63,6 +70,7 @@ pip install holidays APScheduler
 | `{schedule_type}` | 从创意池选取的日程类型 |
 | `{history_schedules}` | 历史日程记录 |
 | `{recent_chats}` | 近期对话记录 |
+| `{weather_context}` | 天气上下文，未启用时会显示未配置提示 |
 
 ## 注入机制
 

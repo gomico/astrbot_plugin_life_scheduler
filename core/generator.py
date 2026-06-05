@@ -12,6 +12,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.star.context import Context
 
 from .data import ScheduleData, ScheduleDataManager
+from .weather import fetch_weather_context
 
 _STYLE_PREFIX_RE = re.compile(
     r"^\s*(?:【?风格】?|\[?风格\]?)\s*[:：]\s*(?P<style>.+?)(?:\n|$)"
@@ -30,6 +31,7 @@ class ScheduleContext:
     mood_color: str
     outfit_style: str
     schedule_type: str
+    weather_context: str = ""
 
 
 class SchedulerGenerator:
@@ -125,6 +127,9 @@ class SchedulerGenerator:
     async def _collect_context(
         self, data: datetime.datetime, umo: str | None
     ) -> ScheduleContext:
+        weather_context = await self._get_weather_context()
+        if weather_context and weather_context != "未配置天气信息":
+            logger.debug(f"[LLM] 天气上下文注入：{weather_context}")
         return ScheduleContext(
             date_str=data.strftime("%Y年%m月%d日"),
             weekday=self._weekday(data),
@@ -132,6 +137,7 @@ class SchedulerGenerator:
             persona_desc=await self._get_persona(),
             history_schedules=self._get_history(data),
             recent_chats=await self._get_recent_chats(umo),
+            weather_context=weather_context,
             **self._pick_diversity(data.date()),
         )
 
@@ -255,6 +261,21 @@ class SchedulerGenerator:
         except Exception as e:
             logger.error(f"Failed to get recent chats for {umo}: {e}")
             return "获取对话记录失败"
+
+    async def _get_weather_context(self) -> str:
+        if not self.config.get("weather_enabled"):
+            return "未配置天气信息"
+
+        latitude = str(self.config.get("weather_latitude", "") or "").strip()
+        longitude = str(self.config.get("weather_longitude", "") or "").strip()
+        if not latitude or not longitude:
+            return "未配置天气信息"
+
+        try:
+            return await fetch_weather_context(latitude, longitude)
+        except Exception as e:
+            logger.error(f"天气上下文获取失败: {e}")
+            return "天气信息获取失败"
 
     async def _get_persona(self) -> str:
         try:

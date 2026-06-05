@@ -41,7 +41,9 @@ def _install_astrbot_stubs():
 _install_astrbot_stubs()
 
 from core.data import ScheduleDataManager  # noqa: E402
+from core import generator as generator_module  # noqa: E402
 from core.generator import ScheduleContext, SchedulerGenerator  # noqa: E402
+from core.weather import format_weather_context, parse_weather_coordinates  # noqa: E402
 from core.utils import build_character_state_injection, select_current_activity  # noqa: E402
 
 
@@ -95,6 +97,9 @@ def _config():
     return {
         "reference_history_days": 3,
         "reference_recent_count": 0,
+        "weather_enabled": False,
+        "weather_latitude": "",
+        "weather_longitude": "",
         "llm_provider": "",
         "pool": {
             "daily_themes": ["探索日"],
@@ -104,6 +109,7 @@ def _config():
         },
         "prompt_template": (
             "# Role: Life Scheduler\n"
+            "## 🌦 天气参考\n{weather_context}\n"
             "- 穿搭风格（必须严格遵循）：【{outfit_style}】\n"
             "- 日程类型：【{schedule_type}】\n"
             "请严格返回 JSON：\n"
@@ -128,6 +134,7 @@ def _ctx():
         mood_color="活力",
         outfit_style="甜酷混搭风",
         schedule_type="户外活动型",
+        weather_context="未配置天气信息",
     )
 
 
@@ -399,6 +406,92 @@ class SchedulerBehaviorTest(unittest.IsolatedAsyncioTestCase):
             select_current_activity(schedule, now=now, wrap_previous_day=False),
             "08:00 起床洗漱",
         )
+
+    def test_parse_weather_coordinates_validates_range(self):
+        lat, lon = parse_weather_coordinates("31.2304", "121.4737")
+        self.assertEqual(lat, 31.2304)
+        self.assertEqual(lon, 121.4737)
+
+        with self.assertRaises(ValueError):
+            parse_weather_coordinates("91", "121.4737")
+
+    def test_format_weather_context_uses_open_meteo_default_wind_unit(self):
+        text = format_weather_context(
+            {
+                "temperature_2m": 28,
+                "apparent_temperature": 29,
+                "precipitation": 0,
+                "weather_code": 0,
+                "wind_speed_10m": 10.8,
+            }
+        )
+
+        self.assertIn("风速 10.8 km/h", text)
+        self.assertNotIn("m/s", text)
+
+    async def test_get_weather_context_skips_network_when_disabled_or_missing(self):
+        generator, _ = self._generator()
+
+        called = False
+
+        async def fake_fetch(latitude, longitude):
+            nonlocal called
+            called = True
+            return "should not be used"
+
+        old_fetch = generator_module.fetch_weather_context
+        generator_module.fetch_weather_context = fake_fetch
+        try:
+            self.assertEqual(await generator._get_weather_context(), "未配置天气信息")
+            self.assertFalse(called)
+
+            generator.config["weather_enabled"] = True
+            generator.config["weather_latitude"] = ""
+            generator.config["weather_longitude"] = ""
+            self.assertEqual(await generator._get_weather_context(), "未配置天气信息")
+            self.assertFalse(called)
+        finally:
+            generator_module.fetch_weather_context = old_fetch
+
+    async def test_get_weather_context_returns_failure_when_fetch_raises(self):
+        generator, _ = self._generator()
+        generator.config["weather_enabled"] = True
+        generator.config["weather_latitude"] = "31.2304"
+        generator.config["weather_longitude"] = "121.4737"
+
+        async def fake_fetch(latitude, longitude):
+            raise RuntimeError("boom")
+
+        old_fetch = generator_module.fetch_weather_context
+        generator_module.fetch_weather_context = fake_fetch
+        try:
+            self.assertEqual(await generator._get_weather_context(), "天气信息获取失败")
+        finally:
+            generator_module.fetch_weather_context = old_fetch
+
+    async def test_generate_schedule_includes_weather_context_in_prompt(self):
+        generator, provider = self._generator(
+            [
+                '{"outfit_style":"甜酷混搭风","outfit":"风格：甜酷混搭风\\n短袖和轻薄外套","schedule":"出门散步"}'
+            ]
+        )
+        generator.config["weather_enabled"] = True
+        generator.config["weather_latitude"] = "31.2304"
+        generator.config["weather_longitude"] = "121.4737"
+
+        async def fake_fetch(latitude, longitude):
+            return "天气：晴朗，气温 28.0°C，体感 29.0°C，降水 0.0 mm，风速 10.8 km/h"
+
+        old_fetch = generator_module.fetch_weather_context
+        generator_module.fetch_weather_context = fake_fetch
+        try:
+            await generator.generate_schedule(datetime.datetime(2026, 5, 24), None)
+        finally:
+            generator_module.fetch_weather_context = old_fetch
+
+        self.assertTrue(provider.prompts)
+        self.assertIn("## 🌦 天气参考", provider.prompts[0])
+        self.assertIn("天气：晴朗，气温 28.0°C", provider.prompts[0])
 
     def test_character_state_injection_includes_current_activity(self):
         schedule = (

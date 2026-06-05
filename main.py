@@ -10,6 +10,7 @@ from astrbot.core.star.star_tools import StarTools
 from .core.data import ScheduleDataManager
 from .core.generator import SchedulerGenerator
 from .core.schedule import LifeScheduler
+from .core.weather import parse_weather_coordinates
 from .core.utils import build_character_state_injection, resolve_business_now
 
 
@@ -30,6 +31,20 @@ class LifeSchedulerPlugin(Star):
             task=self.generator.generate_schedule,
         )
         self.scheduler.start()
+
+    def _save_config(self):
+        save_config = getattr(self.config, "save_config", None)
+        if callable(save_config):
+            save_config()
+
+    @staticmethod
+    def _format_reference_umo(umo: str) -> str:
+        umo = str(umo or "").strip()
+        if not umo:
+            return "未配置"
+        if len(umo) <= 20:
+            return umo
+        return f"{umo[:8]}...{umo[-4:]}（共{len(umo)}字符）"
 
     async def terminate(self):
         """插件卸载时清理"""
@@ -156,3 +171,48 @@ class LifeSchedulerPlugin(Star):
             yield event.plain_result(f"已将每日日程生成时间更新为 {param}。")
         except Exception as e:
             yield event.plain_result(f"设置失败: {e}")
+
+    @filter.permission_type(filter.PermissionType.ADMIN)
+    @filter.command("天气位置", alias={"life location"})
+    async def life_weather_location(
+        self, event: AstrMessageEvent, param: str | None = None
+    ):
+        """天气位置 [lat lon|show|clear]，设置天气参考位置"""
+        action = str(param or "").strip()
+
+        if not action or action.lower() == "show":
+            enabled = bool(self.config.get("weather_enabled"))
+            latitude = str(self.config.get("weather_latitude", "") or "").strip()
+            longitude = str(self.config.get("weather_longitude", "") or "").strip()
+            state = "已启用" if enabled else "未启用"
+            yield event.plain_result(
+                f"天气位置状态：{state}\n纬度：{latitude or '未配置'}\n经度：{longitude or '未配置'}"
+            )
+            return
+
+        if action.lower() == "clear":
+            self.config["weather_enabled"] = False
+            self.config["weather_latitude"] = ""
+            self.config["weather_longitude"] = ""
+            self._save_config()
+            yield event.plain_result("已清除天气位置配置")
+            return
+
+        parts = action.split()
+        if len(parts) != 2:
+            yield event.plain_result("用法：天气位置 <纬度> <经度>，或天气位置 show/clear")
+            return
+
+        try:
+            latitude, longitude = parse_weather_coordinates(parts[0], parts[1])
+        except ValueError as exc:
+            yield event.plain_result(f"坐标格式错误：{exc}")
+            return
+
+        self.config["weather_enabled"] = True
+        self.config["weather_latitude"] = str(latitude)
+        self.config["weather_longitude"] = str(longitude)
+        self._save_config()
+        yield event.plain_result(
+            f"已保存天气位置：纬度 {latitude:g}，经度 {longitude:g}"
+        )

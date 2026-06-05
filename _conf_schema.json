@@ -26,6 +26,24 @@
     },
     "default": 10
   },
+  "weather_enabled": {
+    "description": "启用天气参考",
+    "hint": "开启后会根据经纬度拉取 Open-Meteo 天气信息，并用于穿搭参考。请确认下方 prompt 模板中包含 {weather_context}，否则天气信息不会注入给 LLM。可使用 https://lbs.amap.com/tools/picker 查询经纬度。",
+    "type": "bool",
+    "default": false
+  },
+  "weather_latitude": {
+    "description": "天气参考纬度",
+    "hint": "填写 -90 到 90 之间的纬度，启用天气参考后生效。",
+    "type": "string",
+    "default": ""
+  },
+  "weather_longitude": {
+    "description": "天气参考经度",
+    "hint": "填写 -180 到 180 之间的经度，启用天气参考后生效。",
+    "type": "string",
+    "default": ""
+  },
   "llm_provider": {
     "description": "指定生成日程的 LLM 供应商",
     "hint": "留空则使用当前正在使用的 LLM 供应商。",
@@ -117,12 +135,12 @@
   },
   "prompt_template": {
     "description": "LLM 生成日程的完整 Prompt 模板",
-    "hint":"插件内部支持格式化的占位符有： {date_str}、{weekday}、{holiday}、{persona_desc}、{daily_theme}、{mood_color}、{outfit_style}、{schedule_type}、{history_schedules}、{recent_chats}，其他占位符默认会被替换为空字符串。清空可恢复默认。",
+    "hint":"插件内部支持格式化的占位符有： {date_str}、{weekday}、{holiday}、{persona_desc}、{daily_theme}、{mood_color}、{outfit_style}、{schedule_type}、{history_schedules}、{recent_chats}、{weather_context}，其他占位符默认会被替换为空字符串。清空可恢复默认。",
     "type": "text",
     "obvious_hint": true,
     "editor_mode": true,
     "editor_language": "markdown",
     "editor_theme": "vs-dark",
-    "default": "# Role: Life Scheduler\n请根据以下信息，为自己规划一份今天的生活安排。\n\n## Context\n- 日期：{date_str} {weekday} {holiday}\n- 人设：{persona_desc}\n\n## 🎲 今日创意约束（必须遵循）\n- 今日主题：【{daily_theme}】\n- 心情色彩：【{mood_color}】\n- 穿搭风格（必须严格遵循）：【{outfit_style}】\n- 日程类型：【{schedule_type}】\n\n## 🚫 需要避免的重复内容\n{history_schedules}\n\n## 💡 参考信息\n{recent_chats}\n\n## 强制约束（必须严格遵循）\n- 你必须严格遵循穿搭风格：【{outfit_style}】（不得替换/混用其他风格）。\n- 你必须只输出 JSON 对象本体（不要 Markdown/代码块/解释）。\n- JSON 必须包含字段 \"outfit_style\"，且其值必须严格等于 \"{outfit_style}\"。\n- 字段 \"outfit\" 的第一行必须以 \"风格：{outfit_style}\" 开头。\n\n## Tasks\n1. outfit: 今日穿搭描述（从里到外、从上到下、衣裤内衣裤鞋袜、饰品等，符合天气和心情）\n2. schedule: 规划今日日程。\n\n## Output Format\n请严格返回 JSON：\n{{\n  \"outfit_style\": \"{outfit_style}\",\n  \"outfit\": \"...\",\n  \"schedule\": \"...\"\n}}"
+    "default": "# Role: Life Scheduler\n请根据以下信息，为自己规划一份今天的生活安排。\n\n## Context\n- 日期：{date_str} {weekday} {holiday}\n- 人设：{persona_desc}\n\n## 🌦 天气参考\n{weather_context}\n\n## 🎲 今日创意约束（必须遵循）\n- 今日主题：【{daily_theme}】\n- 心情色彩：【{mood_color}】\n- 穿搭风格（必须严格遵循）：【{outfit_style}】\n- 日程类型：【{schedule_type}】\n- 生成穿搭时请结合天气信息，保证舒适、得体、可执行。\n\n## 🚫 需要避免的重复内容\n{history_schedules}\n\n## 💡 参考信息\n{recent_chats}\n\n## 强制约束（必须严格遵循）\n- 你必须严格遵循穿搭风格：【{outfit_style}】（不得替换/混用其他风格）。\n- 你必须只输出 JSON 对象本体（不要 Markdown/代码块/解释）。\n- JSON 必须包含字段 \"outfit_style\"，且其值必须严格等于 \"{outfit_style}\"。\n- 字段 \"outfit\" 的第一行必须以 \"风格：{outfit_style}\" 开头。\n- 日程描述也要考虑天气信息，保证安排合理。\n\n## Tasks\n1. outfit: 今日穿搭描述（从里到外、从上到下、衣裤内衣裤鞋袜、饰品等，符合天气和心情）\n2. schedule: 规划今日日程。\n\n## Output Format\n请严格返回 JSON：\n{{\n  \"outfit_style\": \"{outfit_style}\",\n  \"outfit\": \"...\",\n  \"schedule\": \"...\"\n}}"
   }
 }
